@@ -6,8 +6,20 @@
 
 不调用任何私有 API、不处理 `csrf` / `bearer token`、不自己发请求。
 
-- 脚本：[x-quick-block.user.js](x-quick-block.user.js)（v1.3.0）
+- 脚本：[x-quick-block.user.js](x-quick-block.user.js)（v1.3.1）
 - 测试：[test/e2e.cjs](test/e2e.cjs)（jsdom 无头端到端，93 项断言）
+
+---
+
+## 界面预览
+
+| 推文右上角的【屏蔽】按钮 | 篡改猴菜单里的确认方式开关 |
+| :---: | :---: |
+| ![暗色主题下的屏蔽按钮](docs/button-dark.png) | ![暗色主题下的脚本菜单](docs/menu-dark.png) |
+| ![亮色主题下的屏蔽按钮](docs/button-light.png) | ![亮色主题下的脚本菜单](docs/menu-light.png) |
+
+> 截图中推文正文与头像已打码处理。
+> 菜单里 ● 表示当前生效项 —— 图中示例为「直接屏蔽 + 官方弹窗自动点掉」= **零确认模式**（点一下即屏蔽）。
 
 ---
 
