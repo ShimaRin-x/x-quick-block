@@ -2,7 +2,7 @@
 // @name         X 快捷屏蔽 · Quick Block for X
 // @name:en      X Quick Block
 // @namespace    https://github.com/ShimaRin-x/x-quick-block
-// @version      1.3.2
+// @version      1.3.3
 // @description  在推文右上角「…」按钮旁注入一个醒目的【屏蔽】按钮；点击后复放 X 官方原生菜单点击链完成屏蔽，不调用任何私有 API、不处理 csrf/bearer token。支持油猴菜单一键切换「需要确认 / 点击即屏蔽」。
 // @description:en Inject a visible Block button next to the tweet caret and drive X's own native menu/confirm flow. Includes a Tampermonkey menu switch for confirm / no-confirm / long-press modes. No private API, no csrf/bearer handling.
 // @author       ShimaRin-x
@@ -74,7 +74,7 @@
    * 0. 配置
    * ══════════════════════════════════════════════════════════════════════ */
 
-  const VERSION = '1.3.2';
+  const VERSION = '1.3.3';
   const LOG_PREFIX = '[XQB]';
 
   const CONFIG = {
@@ -2128,7 +2128,93 @@ html.xqb-dark {
     }
   }
 
+  /**
+   * 重复安装自愈。
+   *
+   * 背景：篡改猴按「@name + @namespace」识别脚本。如果脚本的 namespace 变过
+   * （本项目 v1.3.1 把 namespace 从 github.com/local/... 改成了仓库地址），
+   * 篡改猴会把它当成**另一个脚本**装进去，于是页面上同时跑两份实例：
+   * 每条推文出现两个按钮、两个浮层宿主，而先加载的旧实例抢先建了 <style>，
+   * 新实例看到已存在就跳过 → 旧样式（常驻红色）反而生效。
+   *
+   * 处理：以版本号仲裁，新版本接管并清掉旧实例的 DOM 产物；
+   * 版本相同或更旧的一方直接让位（返回 false 表示不要初始化）。
+   * 注意：这只能让页面恢复正常，无法卸载篡改猴里的旧条目 —— 那一步需要用户在面板里删。
+   *
+   * @returns {boolean} 本实例是否应当继续初始化
+   */
+  function claimSingleton() {
+    const KEY = '__XQB_INSTANCE__';
+    let pageWin = window;
+    try {
+      if (typeof unsafeWindow !== 'undefined' && unsafeWindow) pageWin = unsafeWindow;
+    } catch (_) {
+      /* 取不到就用当前 window */
+    }
+    let prev = null;
+    try {
+      prev = pageWin[KEY] || null;
+    } catch (_) {
+      /* 页面 window 不可读则跳过仲裁，按单实例处理 */
+    }
+
+    const cmp = (a, b) => {
+      const pa = String(a).split('.').map(Number);
+      const pb = String(b).split('.').map(Number);
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const d = (pa[i] || 0) - (pb[i] || 0);
+        if (d) return d > 0 ? 1 : -1;
+      }
+      return 0;
+    };
+
+    if (prev && prev.version && cmp(prev.version, VERSION) >= 0) {
+      // 已有同版本或更新的实例在跑 → 让位，避免重复注入
+      warn('检测到另一个实例（v' + prev.version + '），本实例让位以免重复注入');
+      return false;
+    }
+
+    if (prev) {
+      // 本实例更新 → 接管，并清掉旧实例留下的 DOM 产物
+      warn('检测到旧实例（v' + prev.version + '），本实例 v' + VERSION + ' 接管并清理其残留');
+      try {
+        document.querySelectorAll('.xqb-btn').forEach((b) => b.remove());
+        document.querySelectorAll('#xqb-ui-host, #xqb-style').forEach((n) => n.remove());
+        document.querySelectorAll('[data-xqb],[data-xqb-done]').forEach((a) => {
+          a.removeAttribute('data-xqb');
+          a.removeAttribute('data-xqb-done');
+        });
+        pending.clear();
+        stateMap = new WeakMap();
+      } catch (e) {
+        warn('清理旧实例残留失败（不影响继续初始化）', e);
+      }
+    } else if (document.querySelector('#xqb-ui-host')) {
+      // 没有登记锁却已存在浮层宿主 → 说明页面上还跑着一个**没有本保护机制**的旧版本
+      // （典型成因：改了 @namespace，篡改猴把它当成另一个脚本重复安装）。
+      // 这里只能清掉它的样式表让本实例的样式生效；它自己的 MutationObserver 仍会继续
+      // 注入按钮，所以「每条推文两个按钮」必须靠用户在篡改猴面板删掉旧条目才能根治。
+      warn(
+        '检测到未登记锁的旧实例（很可能是篡改猴里重复安装的旧条目）。' +
+          '请打开篡改猴面板删除重复的「X 快捷屏蔽」，只保留 v' + VERSION + ' 这一条。'
+      );
+      try {
+        document.querySelectorAll('#xqb-style, #xqb-ui-host').forEach((n) => n.remove());
+      } catch (_) {
+        /* ignore */
+      }
+    }
+
+    try {
+      pageWin[KEY] = { version: VERSION, ts: Date.now() };
+    } catch (_) {
+      /* 写不进去也无妨 */
+    }
+    return true;
+  }
+
   function init() {
+    if (!claimSingleton()) return; // 已有实例在跑，直接让位
     applyStoredSettings(); // 先载入用户上次选择的「确认方式」
     injectLightStyle();
     ensureUiHost();
