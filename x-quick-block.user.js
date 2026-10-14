@@ -2,7 +2,7 @@
 // @name         X 快捷屏蔽 · Quick Block for X
 // @name:en      X Quick Block
 // @namespace    https://github.com/ShimaRin-x/x-quick-block
-// @version      1.3.1
+// @version      1.3.2
 // @description  在推文右上角「…」按钮旁注入一个醒目的【屏蔽】按钮；点击后复放 X 官方原生菜单点击链完成屏蔽，不调用任何私有 API、不处理 csrf/bearer token。支持油猴菜单一键切换「需要确认 / 点击即屏蔽」。
 // @description:en Inject a visible Block button next to the tweet caret and drive X's own native menu/confirm flow. Includes a Tampermonkey menu switch for confirm / no-confirm / long-press modes. No private API, no csrf/bearer handling.
 // @author       ShimaRin-x
@@ -74,7 +74,7 @@
    * 0. 配置
    * ══════════════════════════════════════════════════════════════════════ */
 
-  const VERSION = '1.3.1';
+  const VERSION = '1.3.2';
   const LOG_PREFIX = '[XQB]';
 
   const CONFIG = {
@@ -101,8 +101,9 @@
     /** 'after' = 在「…」右侧 | 'before' = 在「…」左侧 */
     buttonPosition: 'after',
     /**
-     * 'pill' = 红色胶囊（图标+「屏蔽」，醒目）| 'icon' = 仅图标（最接近原生）
-     * 两者高度都跟随 caret 实测高度，不会改变 X 的布局。
+     * 'pill' = 图标 + 「屏蔽」文字 | 'icon' = 仅图标（更紧凑）
+     * 两者**默认态都是透明的次级灰**（与 X 的「…」/回复/点赞同色，不打扰阅读），
+     * 鼠标悬停时才变成红色胶囊。高度都跟随 caret 实测高度，不会改变 X 的布局。
      */
     buttonStyle: 'pill',
     /**
@@ -670,7 +671,7 @@
 }
 html.xqb-dark {
   --xqb-danger: rgb(249, 24, 52);
-  --xqb-danger-bg: rgba(249, 24, 52, 0.18);
+  --xqb-danger-bg: rgba(249, 24, 52, 0.12);
   --xqb-fg: rgb(113, 118, 123);
   --xqb-fg-strong: rgb(231, 233, 234);
 }
@@ -702,11 +703,14 @@ html.xqb-dark {
   transition: background-color .15s ease, color .15s ease, opacity .15s ease, transform .1s ease;
   z-index: 2;
 }
-/* 醒目的红色胶囊（默认） */
-.xqb-btn[data-style="pill"] { background: var(--xqb-danger-bg); color: var(--xqb-danger); }
-.xqb-btn[data-style="pill"]:hover { background: var(--xqb-danger); color: #fff; }
-/* 仅图标：平时与 caret 同为次级灰，hover 变红 */
-.xqb-btn[data-style="icon"]:hover { background: var(--xqb-danger-bg); color: var(--xqb-danger); }
+/* 默认态：完全对齐 X 原生操作栏 —— 透明底 + 次级灰（与旁边的「…」同色），不打扰阅读
+   hover 态：红色胶囊（文字/图标变红 + 淡红底），沿用 X 自己 hover 的配色习惯 */
+.xqb-btn[data-style="pill"] { background: transparent; color: var(--xqb-fg); }
+.xqb-btn[data-style="pill"]:hover,
+.xqb-btn[data-style="icon"]:hover {
+  background: var(--xqb-danger-bg);
+  color: var(--xqb-danger);
+}
 .xqb-btn:focus-visible { outline: 2px solid var(--xqb-danger); outline-offset: 1px; }
 .xqb-btn .xqb-ic-slot { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
 .xqb-btn .xqb-ic,

@@ -209,8 +209,22 @@ async function scenarioMain() {
   check('按钮紧跟在 caret 之后', !!btn && btn.previousElementSibling?.getAttribute('data-testid') === 'caret');
   check('tooltip = 屏蔽 @tester', btn && btn.title === '屏蔽 @tester', btn && btn.title);
   check('按钮高度跟随 caret 实测值 20px', btn && btn.style.getPropertyValue('--xqb-h') === '20px', btn && btn.style.getPropertyValue('--xqb-h'));
-  check('默认外观为醒目胶囊', btn && btn.dataset.style === 'pill');
+  check('默认外观为胶囊形态', btn && btn.dataset.style === 'pill');
   check('胶囊含「屏蔽」字样', !!btn && /屏蔽/.test(btn.textContent), btn && btn.textContent);
+  // 样式回归：默认态必须与 X 原生操作栏一致（透明底 + 次级灰），红色只出现在 hover 态
+  const injectedCSS = document.getElementById('xqb-style').textContent;
+  check(
+    '默认态样式：透明底 + 次级灰（不刺眼）',
+    /\.xqb-btn\[data-style="pill"\]\s*\{\s*background:\s*transparent;\s*color:\s*var\(--xqb-fg\)/.test(injectedCSS),
+    injectedCSS.match(/\.xqb-btn\[data-style="pill"\][^}]*\}/)?.[0]
+  );
+  check(
+    '红色只在 hover 态出现',
+    /:hover[^{]*\{[^}]*--xqb-danger-bg/.test(injectedCSS) &&
+      !/\.xqb-btn\[data-style="pill"\]\s*\{[^}]*--xqb-danger-bg/.test(injectedCSS)
+  );
+  check('--xqb-fg 亮色值对齐 X 原生灰 rgb(83,100,113)', /--xqb-fg:\s*rgb\(83,\s*100,\s*113\)/.test(injectedCSS));
+  check('--xqb-fg 暗色值对齐 X 原生灰 rgb(113,118,123)', /--xqb-fg:\s*rgb\(113,\s*118,\s*123\)/.test(injectedCSS));
   check('推文被标记 data-xqb', art.getAttribute('data-xqb') === '1');
   check(
     '调试 API 已挂载',
