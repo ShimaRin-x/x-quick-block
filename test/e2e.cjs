@@ -206,6 +206,7 @@ async function scenarioMain() {
 
   const btn = art.querySelector('.xqb-btn');
   check('注入按钮存在', !!btn);
+  check('按钮带本实例标记 .xqb-mine', btn && btn.classList.contains('xqb-mine'));
   check('按钮紧跟在 caret 之后', !!btn && btn.previousElementSibling?.getAttribute('data-testid') === 'caret');
   check('tooltip = 屏蔽 @tester', btn && btn.title === '屏蔽 @tester', btn && btn.title);
   check('按钮高度跟随 caret 实测值 20px', btn && btn.style.getPropertyValue('--xqb-h') === '20px', btn && btn.style.getPropertyValue('--xqb-h'));
@@ -621,6 +622,51 @@ async function scenarioStoredMode() {
   check('启动时应用了已存的 autoConfirmNative', window.__XQB__.config.autoConfirmNative === false);
 }
 
+async function scenarioDuplicateInstall() {
+  console.log('\n[16] 重复安装（篡改猴里装了两份）：旧实例的按钮必须被隐藏，新实例照常工作');
+  const { window, document } = boot();
+  const state = { blocked: [], menuOpens: 0, dialogs: 0, itemClicks: [], currentArticle: null, blockTestId: true };
+  installFakeX(window, state);
+  const art = makeTweet(window, 'tester', 'dup1');
+
+  // 模拟「旧实例」留下的产物：一个没有 .xqb-mine 标记的按钮 + 它的浮层宿主
+  const legacy = document.createElement('div');
+  legacy.className = 'xqb-btn';
+  legacy.title = '屏蔽 @tester（旧实例）';
+  art.querySelector('[data-testid="caret"]').insertAdjacentElement('afterend', legacy);
+  const legacyHost = document.createElement('div');
+  legacyHost.id = 'xqb-ui-host';
+  document.body.appendChild(legacyHost);
+
+  window.eval(code);
+  await sleep(200);
+  window.__XQB__.config.nativeConfirmDelayMs = 20;
+
+  check('新实例识别出旧实例产物', document.querySelectorAll('.xqb-btn').length === 2, String(document.querySelectorAll('.xqb-btn').length));
+  check('本实例按钮带标记', document.querySelectorAll('.xqb-btn.xqb-mine').length === 1);
+  check('旧实例按钮不带标记（交给 CSS 隐藏）', document.querySelectorAll('.xqb-btn:not(.xqb-mine)').length === 1);
+  check(
+    'CSS 规则会隐藏旧实例按钮',
+    /\.xqb-btn:not\(\.xqb-mine\)\s*\{\s*display:\s*none/.test(document.getElementById('xqb-style').textContent)
+  );
+
+  const st = window.__XQB__.selftest();
+  check('selftest 只统计本实例按钮', st.injected === 1 && st.tweets === 1, JSON.stringify(st));
+  check('selftest 报告存在重复实例', st.duplicateInstances === 1, JSON.stringify(st));
+  const diag = window.__XQB__.diagnose();
+  check('diagnose 报告重复按钮数', diag.duplicateInstanceButtons === 1, JSON.stringify(diag));
+
+  // 关键：点击必须作用在本实例的按钮上，而不是旧实例那个
+  const mine = art.querySelector('.xqb-btn.xqb-mine');
+  mine.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  await sleep(30);
+  const pop = document.querySelector('#xqb-ui-host').shadowRoot.querySelector('.pop');
+  check('气泡由本实例弹出（旧宿主已清掉）', !!pop);
+  pop.querySelector('button[data-act="ok"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  await sleep(500);
+  check('屏蔽正常完成', state.blocked.includes('tester'), JSON.stringify(state.blocked));
+}
+
 async function scenarioNoCaret() {
   console.log('\n[11] 引用推文/无 caret：不应注入按钮，也不应报错');
   const { window, document } = boot();
@@ -649,6 +695,7 @@ async function scenarioNoCaret() {
   await scenarioLongPress();
   await scenarioManualNative();
   await scenarioStoredMode();
+  await scenarioDuplicateInstall();
   await scenarioNoCaret();
   console.log('\n========================================');
   console.log('  通过 ' + passes + ' 项，失败 ' + failures + ' 项');

@@ -628,7 +628,8 @@
 
   function applyCachedIconToAll() {
     if (!Visual.iconSvg) return;
-    document.querySelectorAll('.xqb-btn .xqb-ic-slot').forEach((slot) => {
+    // 只更新本实例的按钮；旧实例的按钮已被 CSS 隐藏，不必也不该去改它
+    document.querySelectorAll('.xqb-btn.xqb-mine .xqb-ic-slot').forEach((slot) => {
       if (slot.dataset.icon === 'native') return; // 已是官方图标
       slot.innerHTML = iconHTML();
       slot.dataset.icon = 'native';
@@ -703,6 +704,14 @@ html.xqb-dark {
   transition: background-color .15s ease, color .15s ease, opacity .15s ease, transform .1s ease;
   z-index: 2;
 }
+/*
+ * 重复安装自愈（配套 claimSingleton）：
+ * 篡改猴按「@name + @namespace」识别脚本，namespace 一旦变过就会**重复安装**，
+ * 页面上会同时跑两份实例、每条推文两个按钮。本实例的按钮带 .xqb-mine 标记，
+ * 没有标记的即旧实例产物 —— 用 CSS 藏掉，而不是删掉它：
+ * 删掉的话旧实例会发现按钮断开连接并立刻重建（拉锯战），藏起来它则认为一切正常。
+ */
+.xqb-btn:not(.xqb-mine) { display: none !important; }
 /* 默认态：完全对齐 X 原生操作栏 —— 透明底 + 次级灰（与旁边的「…」同色），不打扰阅读
    hover 态：红色胶囊（文字/图标变红 + 淡红底），沿用 X 自己 hover 的配色习惯 */
 .xqb-btn[data-style="pill"] { background: transparent; color: var(--xqb-fg); }
@@ -1544,7 +1553,9 @@ html.xqb-dark {
   function createBlockButton(article, caret, key) {
     const handle = getHandle(article);
     const btn = document.createElement('div');
-    btn.className = 'xqb-btn';
+    // xqb-mine 是「本实例产物」标记：CSS 会隐藏没有该标记的 .xqb-btn，
+    // 用于在篡改猴里存在重复安装时压制旧实例的按钮（见 claimSingleton）
+    btn.className = 'xqb-btn xqb-mine';
     btn.setAttribute('role', 'button');
     btn.setAttribute('tabindex', '0');
     btn.dataset.handle = handle;
@@ -1737,6 +1748,11 @@ html.xqb-dark {
     article.setAttribute('data-xqb', '1');
   }
 
+  /** 取本实例注入的按钮（排除重复安装时旧实例留下的按钮） */
+  function ownButton(article) {
+    return article ? article.querySelector('.xqb-btn.xqb-mine') : null;
+  }
+
   /** 按钮文案随推文复用一起更新 */
   function syncButtonMeta(btn, article) {
     const handle = btn.dataset.handle || '';
@@ -1921,7 +1937,7 @@ html.xqb-dark {
         if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
         const art = hoveredArticle && hoveredArticle.isConnected ? hoveredArticle : null;
         if (!art) return;
-        const btn = art.querySelector('.xqb-btn');
+        const btn = ownButton(art);
         if (!btn) return;
         e.preventDefault();
         e.stopPropagation();
@@ -1946,7 +1962,7 @@ html.xqb-dark {
     blockTweet(articleEl) {
       const art = articleEl || document.querySelector(SEL.tweet.join(','));
       if (!art) return Promise.reject(new Error('未找到推文节点'));
-      const btn = art.querySelector('.xqb-btn');
+      const btn = ownButton(art);
       if (btn) {
         btn.click();
         return Promise.resolve('已触发按钮点击');
@@ -1993,13 +2009,17 @@ html.xqb-dark {
     diagnose() {
       const arts = document.querySelectorAll(SEL.tweet.join(','));
       const withCaret = Array.from(arts).filter((a) => findCaret(a)).length;
-      const withBtn = document.querySelectorAll('.xqb-btn').length;
+      const withBtn = Array.from(document.querySelectorAll('.xqb-btn.xqb-mine')).length;
+      const foreignBtn = Array.from(document.querySelectorAll('.xqb-btn')).filter(
+        (b) => !b.classList.contains('xqb-mine')
+      ).length;
       const info = {
         version: VERSION,
         theme: detectTheme(),
         tweetNodes: arts.length,
         injectable: withCaret,
         injectedButtons: withBtn,
+        duplicateInstanceButtons: foreignBtn,
         popoverOpen: Popover.isOpen(),
         menuOpen: getVisibleMenuRoots().length,
         busy: isBusy(),
@@ -2022,8 +2042,7 @@ html.xqb-dark {
       const arts = Array.from(document.querySelectorAll(SEL.tweet.join(',')));
       const rows = arts.map((a, i) => {
         const caret = findCaret(a);
-        const btn = a.querySelector('.xqb-btn');
-        const own = btn && btn.closest(SEL.tweet.join(',')) === a ? btn : null;
+        const own = ownButton(a);
         const s = stateMap.get(a);
         return {
           i,
@@ -2038,14 +2057,30 @@ html.xqb-dark {
         };
       });
       const missing = rows.filter((r) => r.hasCaret && !r.injected && !r.done);
+      // 重复安装检测：页面上存在不是本实例注入的 .xqb-btn（旧实例产物，已被 CSS 隐藏）
+      const foreign = Array.from(document.querySelectorAll('.xqb-btn')).filter(
+        (b) => !b.classList.contains('xqb-mine')
+      );
       const summary = {
         tweets: rows.length,
         withCaret: rows.filter((r) => r.hasCaret).length,
         injected: rows.filter((r) => r.injected).length,
         markedDone: rows.filter((r) => r.done).length,
         problems: missing.length,
+        duplicateInstances: foreign.length ? Math.ceil(foreign.length / Math.max(1, rows.length)) : 0,
       };
       console.table(summary);
+      if (foreign.length) {
+        console.warn(
+          LOG_PREFIX +
+            ' 检测到 ' +
+            foreign.length +
+            ' 个来自旧实例的按钮（已自动隐藏）。这通常是篡改猴里重复安装了本脚本：' +
+            '请在篡改猴面板删除命名空间为 https://github.com/local/x-quick-block 的旧条目，只保留 v' +
+            VERSION +
+            ' 这条。'
+        );
+      }
       if (missing.length) {
         const detail = missing.map((r) => ({ i: r.i, handle: r.handle, hasCaret: r.hasCaret }));
         console.warn(LOG_PREFIX + ' 以下推文未注入按钮：', detail);
