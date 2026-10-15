@@ -2,7 +2,7 @@
 // @name         X 快捷屏蔽 · Quick Block for X
 // @name:en      X Quick Block
 // @namespace    https://github.com/ShimaRin-x/x-quick-block
-// @version      1.3.3
+// @version      1.3.4
 // @description  在推文右上角「…」按钮旁注入一个醒目的【屏蔽】按钮；点击后复放 X 官方原生菜单点击链完成屏蔽，不调用任何私有 API、不处理 csrf/bearer token。支持油猴菜单一键切换「需要确认 / 点击即屏蔽」。
 // @description:en Inject a visible Block button next to the tweet caret and drive X's own native menu/confirm flow. Includes a Tampermonkey menu switch for confirm / no-confirm / long-press modes. No private API, no csrf/bearer handling.
 // @author       ShimaRin-x
@@ -74,7 +74,7 @@
    * 0. 配置
    * ══════════════════════════════════════════════════════════════════════ */
 
-  const VERSION = '1.3.3';
+  const VERSION = '1.3.4';
   const LOG_PREFIX = '[XQB]';
 
   const CONFIG = {
